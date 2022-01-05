@@ -1,2 +1,3 @@
-# hikepkg-template
-template for HIKe packages
+# stamp HIKe package
+
+Simple Two-Way Active Measurement Protocol with HIKe 
