@@ -63,6 +63,8 @@
  *
  * 
 */
+bpf_map(map_time, HASH, __u8, __u64, 1);
+
 HIKE_PROG(HIKE_PROG_NAME) {
 #define BUF_LEN 10
   struct pkt_info *info;
@@ -108,7 +110,12 @@ HIKE_PROG(HIKE_PROG_NAME) {
   __u64 timestamp;
   __u64 display2;
   __u16 udp_plen;
-  __u16 udp_poff; //udp payload offset 
+  __u16 udp_poff; //udp payload offset
+  __u64 new_timestamp;
+  __u64 boottime;
+  __u64 *value;
+  __u8 key = 0;
+
 
   char *p;
   char *keyword;
@@ -175,9 +182,31 @@ HIKE_PROG(HIKE_PROG_NAME) {
   if (unlikely(!stamp_ptr))
     goto drop;
 
+/* read boot time from kernel, read delta between kernel boot time
+ * and user space clock real time from map. Add them up and get
+ * current clock real time.
+ * 
+ * Need to have started already python script stamp_maps.py to populate
+ * map with delta value, if map is empty, the packet is dropped.
+ */
+
   timestamp = *((__u64 *)&stamp_ptr->timestamp) ;
   timestamp = bpf_be64_to_cpu(timestamp);
   DEBUG_HKPRG_PRINT("timestamp : %llx", timestamp); 
+
+  boottime = bpf_ktime_get_boot_ns();
+  if (unlikely(!boottime))
+		goto drop;
+  DEBUG_HKPRG_PRINT("boot time: %llx", boottime);
+  value = bpf_map_lookup_elem(&map_time, &key);
+  if (unlikely(!value))
+		goto drop;
+  DEBUG_HKPRG_PRINT("delta: %llx", *value);
+  new_timestamp = boottime + *value;
+  DEBUG_HKPRG_PRINT("new timestamp: %llx", new_timestamp);
+  new_timestamp = bpf_cpu_to_be64(new_timestamp);
+  DEBUG_HKPRG_PRINT("new timestamp be: %llx", new_timestamp);
+  stamp_ptr->timestamp = new_timestamp;
 
 
 
