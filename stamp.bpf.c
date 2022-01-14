@@ -82,12 +82,19 @@ HIKE_PROG(HIKE_PROG_NAME) {
   } __attribute__((packed));
   struct stamp *stamp_ptr;
 
-  struct stamp_up {
+  struct stamp_refl {
     __u32 seq_number;
     __u64 timestamp;
     __u16 error_estimate;
     __u16 ssid;
-  } ;
+    __u64 receive_timestamp;
+    __u32 sess_send_seq_num;
+    __u32 sess_send_timestamp;
+    __u16 sess_send_err_estimate;
+    __u16 mbz_16;
+    __u8 sess_send_ttl;
+  } __attribute__((packed));
+  struct stamp_refl* stamp_refl_ptr;
 
   union { 
     struct ethhdr *eth_h;
@@ -171,10 +178,9 @@ HIKE_PROG(HIKE_PROG_NAME) {
   udp_plen = bpf_ntohs(udph->len) - sizeof(*udph);
   DEBUG_HKPRG_PRINT("UDP payload len: %d", udp_plen);
   DEBUG_HKPRG_PRINT("sizeof stamp: %d", sizeof(struct stamp));
-  DEBUG_HKPRG_PRINT("sizeof stamp_up: %d", sizeof(struct stamp_up));
 
-  udp_poff = cur->dataoff + sizeof(*udph);
-    
+  udp_poff = offset + sizeof(*udph);
+
   HVM_RET = 0;
 
   stamp_ptr = (struct stamp *)cur_header_pointer(ctx, cur, udp_poff, 
