@@ -37,6 +37,8 @@
 bpf_map(map_time, HASH, __u8, __u64, 1);
 
 HIKE_PROG(HIKE_PROG_NAME) {
+  #define STAMP_DST_PORT 862
+
   struct stamp {
     __u32 seq_number;
     __u64 timestamp;
@@ -56,6 +58,7 @@ HIKE_PROG(HIKE_PROG_NAME) {
   struct pkt_info *info;
   struct udphdr *udph;  
   __u64 timestamp;
+  __u16 udp_dest;
   __u16 udp_plen;
   __u16 udp_poff; //udp payload offset
   __u64 boottime;
@@ -95,8 +98,6 @@ HIKE_PROG(HIKE_PROG_NAME) {
     }
   }
 
-  //DEBUG_HKPRG_PRINT("-------------> ret : %d", ret);
-
   if (ret == 58) { //Hide ICMPv6 packets 
     goto out;
   }
@@ -110,6 +111,12 @@ HIKE_PROG(HIKE_PROG_NAME) {
                                              sizeof(*udph));
   if (unlikely(!udph)) 
     goto drop;
+
+  udp_dest = bpf_ntohs(udph->dest);
+  if (udp_dest != STAMP_DST_PORT) {
+    DEBUG_HKPRG_PRINT("Destination port is not STAMP: %u", udp_dest);
+    goto out;
+  }
 
   //udp_len including header
   udp_plen = bpf_ntohs(udph->len) - sizeof(*udph);
