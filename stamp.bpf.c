@@ -183,9 +183,9 @@ HIKE_PROG(HIKE_PROG_NAME) {
 
   HVM_RET = 0;
 
-  stamp_ptr = (struct stamp *)cur_header_pointer(ctx, cur, udp_poff, 
-                                    sizeof(*stamp_ptr));
-  if (unlikely(!stamp_ptr))
+  stamp_refl_ptr = (struct stamp_refl *)cur_header_pointer(ctx, cur, udp_poff, 
+                                    sizeof(*stamp_refl_ptr));
+  if (unlikely(!stamp_refl_ptr))
     goto drop;
 
 /* read boot time from kernel, read delta between kernel boot time
@@ -196,7 +196,7 @@ HIKE_PROG(HIKE_PROG_NAME) {
  * map with delta value, if map is empty, the packet is dropped.
  */
 
-  timestamp = *((__u64 *)&stamp_ptr->timestamp) ;
+  timestamp = *((__u64 *)&stamp_refl_ptr->timestamp) ;
   timestamp = bpf_be64_to_cpu(timestamp);
   DEBUG_HKPRG_PRINT("timestamp : %llx", timestamp); 
 
@@ -212,7 +212,7 @@ HIKE_PROG(HIKE_PROG_NAME) {
   DEBUG_HKPRG_PRINT("new timestamp: %llx", new_timestamp);
   new_timestamp = bpf_cpu_to_be64(new_timestamp);
   DEBUG_HKPRG_PRINT("new timestamp be: %llx", new_timestamp);
-  stamp_ptr->timestamp = new_timestamp;
+  stamp_refl_ptr->receive_timestamp = new_timestamp;
 
 
 
