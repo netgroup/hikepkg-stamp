@@ -55,7 +55,8 @@ HIKE_PROG(HIKE_PROG_NAME)
   __u64 receive_timestamp;
   struct hdr_cursor *cur;
   struct pkt_info *info;
-  struct udphdr *udph;  
+  struct udphdr *udph;
+  __u64 hvm_ret = 0; /* set to 1 if packet won't be processed */
   __u64 timestamp;
   __u16 udp_dest;
   __u16 udp_plen;
@@ -90,6 +91,7 @@ HIKE_PROG(HIKE_PROG_NAME)
       /* fallthrough */
     case -EOPNOTSUPP:
       DEBUG_HKPRG_PRINT("No Transport Info; error: %d", ret);
+      hvm_ret = 1;
       goto out;
     default:
       DEBUG_HKPRG_PRINT("Unrecoverable error: %d", ret);
@@ -97,12 +99,14 @@ HIKE_PROG(HIKE_PROG_NAME)
     }
   }
 
-  if (ret == 58) { //Hide ICMPv6 packets 
+  if (ret == 58) { //Hide ICMPv6 packets
+    hvm_ret = 1;
     goto out;
   }
 
   if (ret != IPPROTO_UDP) {
     DEBUG_HKPRG_PRINT("Transport <> UDP : %d", ret);
+    hvm_ret = 1;
     goto out;
   }
 
@@ -114,6 +118,7 @@ HIKE_PROG(HIKE_PROG_NAME)
   udp_dest = bpf_ntohs(udph->dest);
   if (udp_dest != STAMP_DST_PORT) {
     DEBUG_HKPRG_PRINT("Destination port is not STAMP: %u", udp_dest);
+    hvm_ret = 1;
     goto out;
   }
 
@@ -123,7 +128,7 @@ HIKE_PROG(HIKE_PROG_NAME)
 
   udp_poff = offset + sizeof(*udph);
 
-  HVM_RET = 0;
+  HVM_RET = hvm_ret;
 
   stamp_ptr = (struct stamp *)cur_header_pointer(ctx, cur, udp_poff, 
                                     sizeof(*stamp_ptr));
