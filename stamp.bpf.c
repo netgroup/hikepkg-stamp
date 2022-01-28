@@ -8,8 +8,6 @@
  * 
  * TODO: finish protocol implementation. Receive timestamp done.
  * 
- * TODO: check UDP dest port.
- * 
  * Need to populate map with the "stamp_maps.py" script to work.
  * If map is empty, the packet is dropped.
  */
@@ -34,24 +32,25 @@
 
 #endif
 
+#define STAMP_DST_PORT 862
+
+struct stamp {
+  __u32 seq_number;
+  __u64 timestamp;
+  __u16 error_estimate;
+  __u16 ssid;
+  __u64 receive_timestamp;
+  __u32 sess_send_seq_num;
+  __u32 sess_send_timestamp;
+  __u16 sess_send_err_estimate;
+  __u16 mbz_16;
+  __u8 sess_send_ttl;
+} __attribute__((packed));
+
 bpf_map(map_time, HASH, __u8, __u64, 1);
 
-HIKE_PROG(HIKE_PROG_NAME) {
-  #define STAMP_DST_PORT 862
-
-  struct stamp {
-    __u32 seq_number;
-    __u64 timestamp;
-    __u16 error_estimate;
-    __u16 ssid;
-    __u64 receive_timestamp;
-    __u32 sess_send_seq_num;
-    __u32 sess_send_timestamp;
-    __u16 sess_send_err_estimate;
-    __u16 mbz_16;
-    __u8 sess_send_ttl;
-  } __attribute__((packed));
-
+HIKE_PROG(HIKE_PROG_NAME)
+{
   struct stamp* stamp_ptr;
   __u64 receive_timestamp;
   struct hdr_cursor *cur;
@@ -144,8 +143,6 @@ HIKE_PROG(HIKE_PROG_NAME) {
   DEBUG_HKPRG_PRINT("timestamp : %llx", timestamp); 
 
   boottime = bpf_ktime_get_boot_ns();
-  if (unlikely(!boottime))
-		goto drop;
   DEBUG_HKPRG_PRINT("boot time: %llx", boottime);
   delta = bpf_map_lookup_elem(&map_time, &key);
   if (unlikely(!delta))
@@ -164,12 +161,9 @@ drop:
   DEBUG_HKPRG_PRINT("drop packet");
 	return HIKE_XDP_ABORTED;
 
-#undef eth_h 
-#undef ip6h  
-#undef udph  
-#undef tcph  
 }
-EXPORT_HIKE_PROG(HIKE_PROG_NAME);
+EXPORT_HIKE_PROG_1(HIKE_PROG_NAME);
+EXPORT_HIKE_PROG_MAP(HIKE_PROG_NAME, map_time);
 
 #ifdef REAL
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
