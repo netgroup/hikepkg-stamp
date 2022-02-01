@@ -68,7 +68,6 @@ HIKE_PROG(HIKE_PROG_NAME)
   __u32 nanoseconds;
   __u64 timestamp;
   __u16 udp_dest;
-  __u16 udp_plen;
   __u16 udp_poff; //udp payload offset
   __u64 boottime;
   int offset = 0;
@@ -151,10 +150,6 @@ HIKE_PROG(HIKE_PROG_NAME)
     goto out;
   }
 
-  //udp_len including header
-  udp_plen = bpf_ntohs(udph->len) - sizeof(*udph);
-  DEBUG_HKPRG_PRINT("UDP payload len: %d", udp_plen);
-
   udp_poff = offset + sizeof(*udph);
 
   HVM_RET = hvm_ret;
@@ -164,8 +159,6 @@ HIKE_PROG(HIKE_PROG_NAME)
   if (unlikely(!stamp_ptr))
     goto drop;
 
-/* get TTL from IPv6 packet */
-
 /* read boot time from kernel, read delta between kernel boot time
  * and user space clock real time from map. Add them up and get
  * current clock real time.
@@ -173,8 +166,6 @@ HIKE_PROG(HIKE_PROG_NAME)
  * Need to have started already python script stamp_maps.py to populate
  * map with delta value, if map is empty, the packet is dropped.
  */
-
-  // timestamp = *((__u64 *)&stamp_ptr->timestamp);
   timestamp = stamp_ptr->timestamp;
   DEBUG_HKPRG_PRINT("sender timestamp: %llx", bpf_be64_to_cpu(timestamp));
   boottime = bpf_ktime_get_boot_ns();
