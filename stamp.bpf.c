@@ -152,8 +152,6 @@ HIKE_PROG(HIKE_PROG_NAME)
 
   udp_poff = offset + sizeof(*udph);
 
-  HVM_RET = hvm_ret;
-
   stamp_ptr = (struct stamp *)cur_header_pointer(ctx, cur, udp_poff, 
                                     sizeof(*stamp_ptr));
   if (unlikely(!stamp_ptr))
@@ -191,6 +189,7 @@ HIKE_PROG(HIKE_PROG_NAME)
   stamp_ptr->sess_send_ttl = ttl;
 
 out:
+  HVM_RET = hvm_ret;
 	return HIKE_XDP_VM;
 
 drop:

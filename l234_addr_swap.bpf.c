@@ -14,6 +14,9 @@
 #define REAL
 //#define REPL
 
+#define IPV6_ADDR_SIZE 128
+#define HOP_LIMIT 64
+
 #include <linux/if_ether.h>
 #include <linux/udp.h>
 #include <linux/ipv6.h>
@@ -32,18 +35,19 @@
 
 HIKE_PROG(HIKE_PROG_NAME)
 {
-  unsigned char	eth_addr[ETH_ALEN] = "asd";
+  unsigned char	eth_addr[ETH_ALEN];
+  struct in6_addr ip6addr;
   struct hdr_cursor *cur;
   struct pkt_info *info;
   struct ethhdr *eth_h;
   struct ipv6hdr *ip6h;
   struct udphdr *udph;
   __u64 hvm_ret = 0; /* set to 1 if packet won't be processed */
+  __u16 udp_port;
+  int offset = 0;
   __u64 eth_src;
   __u64 eth_dst;
-  __u16 udp_dest;
-  __u16 udp_poff; //udp payload offset
-  int offset = 0;
+  __sum16 check;
   int ret;
 
   /* retrieve packet information from HIKe shared memory*/
@@ -63,39 +67,68 @@ HIKE_PROG(HIKE_PROG_NAME)
   if (unlikely(!eth_h)) 
     goto drop;
 
-  // eth_dst = (*((__u64 *)&eth_h->h_dest[0])) & 0xffffffffffff;
-  // eth_src = (*((__u64 *)&eth_h->h_source[0])) & 0xffffffffffff;
-  memcpy(&eth_dst, &eth_h->h_dest[0], ETH_ALEN);
+  memcpy(&eth_dst, eth_h->h_dest, ETH_ALEN);
   memcpy(&eth_src, eth_h->h_source, ETH_ALEN);
   DEBUG_HKPRG_PRINT("Layer 2 dst : %llx", eth_dst);
   DEBUG_HKPRG_PRINT("Layer 2 src : %llx", eth_src);
   memcpy(eth_addr, eth_h->h_source, ETH_ALEN);
-
-  DEBUG_HKPRG_PRINT("eth addr : %lx", *((__u32*) eth_addr));
-  DEBUG_HKPRG_PRINT("eth src : %lx", *((__u32*) eth_h->h_source));
-  DEBUG_HKPRG_PRINT("eth dst : %lx", *((__u32*) eth_h->h_dest));
-  memcpy(&eth_h->h_dest[0], eth_addr, ETH_ALEN);
-  memcpy(&eth_h->h_source[0], eth_addr, ETH_ALEN);
+  memcpy(eth_h->h_source, eth_h->h_dest, ETH_ALEN);
+  memcpy(eth_h->h_dest, eth_addr, ETH_ALEN);
   DEBUG_HKPRG_PRINT("Swapping...");
-  DEBUG_HKPRG_PRINT("eth src : %lx", *((__u32*) eth_h->h_source));
-  DEBUG_HKPRG_PRINT("eth dst : %lx", *((__u32*) eth_h->h_dest));
-  // memcpy(eth_addr, eth_h->h_dest, ETH_ALEN);
-  // memcpy(eth_h->h_dest, eth_h->h_source, ETH_ALEN);
-  // memcpy(eth_h->h_source, eth_addr, ETH_ALEN);
+  memcpy(&eth_dst, eth_h->h_dest, ETH_ALEN);
+  memcpy(&eth_src, eth_h->h_source, ETH_ALEN);
+  DEBUG_HKPRG_PRINT("Layer 2 dst : %llx", eth_dst);
+  DEBUG_HKPRG_PRINT("Layer 2 src : %llx", eth_src);
 
+  /* IPv6 */
+  ip6h = (struct ipv6hdr *)cur_header_pointer(ctx, cur, cur->nhoff,
+            sizeof(*ip6h));
+  if (unlikely(!ip6h)) 
+    goto drop;
+  ip6addr = ip6h->saddr;
+  ip6h->saddr = ip6h->daddr;
+  ip6h->daddr = ip6addr;
+  ip6h->hop_limit = HOP_LIMIT;
 
-
-
-
-
-
-
-
-
-
-
+  /* UDP */
+  ret = ipv6_find_hdr(ctx, cur, &offset, -1, NULL, NULL);
+  if (unlikely(ret < 0)) {
+    switch (ret) {
+    case -ENOENT:
+      /* fallthrough */
+    case -ELOOP:
+      /* fallthrough */
+    case -EOPNOTSUPP:
+      DEBUG_HKPRG_PRINT("No Transport Info; error: %d", ret);
+      hvm_ret = 1;
+      goto out;
+    default:
+      DEBUG_HKPRG_PRINT("Unrecoverable error: %d", ret);
+      goto drop;
+    }
+  }
+  if (ret != IPPROTO_UDP) {
+    DEBUG_HKPRG_PRINT("Transport <> UDP : %d", ret);
+    hvm_ret = 1;
+    goto out;
+  }
+  udph = (struct udphdr *)cur_header_pointer(ctx, cur, offset, sizeof(*udph));
+  if (unlikely(!udph)) 
+    goto drop;
+  udp_port = udph->source;
+  udph->source = udph->dest;
+  udph->dest = udp_port;
+  /* checksum */
+  ret = ipv6_udp_checksum(ctx, ip6h, udph, &check);
+	if (unlikely(ret)) {
+		DEBUG_HKPRG_PRINT("Error: checksum error=%d", ret);
+    DEBUG_HKPRG_PRINT("udp check=0x%x", bpf_ntohs(check));
+		goto out;
+	}
+  udph->check = check;
 
 out:
+  HVM_RET = 0;
 	return HIKE_XDP_VM;
 
 drop:
