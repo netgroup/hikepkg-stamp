@@ -6,7 +6,6 @@
 /* Swap src and dst addresses in Eth and IPv6 headers
  * Reset IPv6 hop limit
  * Swap src and dst port numbers in UDP header
- * Recalculate correct UDP checksum
  */
 
 #define HIKE_DEBUG 1
@@ -15,11 +14,13 @@
 //#define REPL
 
 #define IPV6_ADDR_SIZE 128
+#define IPPROTO_SRH 43
 #define HOP_LIMIT 64
 
 #include <linux/if_ether.h>
 #include <linux/udp.h>
 #include <linux/ipv6.h>
+#include <linux/seg6.h>
 
 #ifdef REAL
   #include "hike_vm.h"
@@ -69,12 +70,9 @@ HIKE_PROG(HIKE_PROG_NAME)
 
   memcpy(&eth_dst, eth_h->h_dest, ETH_ALEN);
   memcpy(&eth_src, eth_h->h_source, ETH_ALEN);
-  DEBUG_HKPRG_PRINT("Layer 2 dst : %llx", eth_dst);
-  DEBUG_HKPRG_PRINT("Layer 2 src : %llx", eth_src);
   memcpy(eth_addr, eth_h->h_source, ETH_ALEN);
   memcpy(eth_h->h_source, eth_h->h_dest, ETH_ALEN);
   memcpy(eth_h->h_dest, eth_addr, ETH_ALEN);
-  DEBUG_HKPRG_PRINT("Swapping...");
   memcpy(&eth_dst, eth_h->h_dest, ETH_ALEN);
   memcpy(&eth_src, eth_h->h_source, ETH_ALEN);
   DEBUG_HKPRG_PRINT("Layer 2 dst : %llx", eth_dst);
@@ -118,14 +116,6 @@ HIKE_PROG(HIKE_PROG_NAME)
   udp_port = udph->source;
   udph->source = udph->dest;
   udph->dest = udp_port;
-  /* checksum */
-  ret = ipv6_udp_checksum(ctx, ip6h, udph, &check);
-	if (unlikely(ret)) {
-		DEBUG_HKPRG_PRINT("Error: checksum error=%d", ret);
-    DEBUG_HKPRG_PRINT("udp check=0x%x", bpf_ntohs(check));
-		goto out;
-	}
-  udph->check = check;
 
 out:
   HVM_RET = 0;
