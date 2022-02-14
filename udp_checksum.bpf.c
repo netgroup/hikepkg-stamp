@@ -6,14 +6,12 @@
 /* Recalculate correct UDP checksum
  */
 
-#define HIKE_DEBUG 1
+#define HIKE_PRINT_LEVEL HIKE_PRINT_LEVEL_DEBUG
 
 #define REAL
 //#define REPL
 
-#define IPV6_ADDR_SIZE 128
 #define IPPROTO_SRH 43
-#define HOP_LIMIT 64
 
 #include <linux/udp.h>
 #include <linux/ipv6.h>
@@ -25,7 +23,6 @@
 #endif  
 
 #ifdef REPL
-  #define HIKE_DEBUG 1 
   //#include "tb_defs.h"
   #include "ip6_hset_repl.h"
   #include "mock.h"
@@ -74,15 +71,15 @@ HIKE_PROG(HIKE_PROG_NAME)
     case -ELOOP:
       /* fallthrough */
     case -EOPNOTSUPP:
-      DEBUG_HKPRG_PRINT("-EOPNOTSUPP; error: %d", ret);
+      hike_pr_debug("-EOPNOTSUPP; error: %d", ret);
       goto out;
     default:
-      DEBUG_HKPRG_PRINT("Unrecoverable error: %d", ret);
+      hike_pr_debug("Unrecoverable error: %d", ret);
       goto drop;
     }
   }
   if (ret != IPPROTO_SRH) {
-    DEBUG_HKPRG_PRINT("No SRH : %d", ret);
+    hike_pr_debug("No SRH : %d", ret);
     goto out;
   }
   /* if we are sure that there is at least 1 segment, allocating memory for
@@ -93,7 +90,7 @@ HIKE_PROG(HIKE_PROG_NAME)
   //   if (unlikely(!srh)) 
   //     goto drop;
   // }
-  // DEBUG_HKPRG_PRINT("sizeof(*srh): %d", sizeof(*srh));
+  // hike_pr_debug("sizeof(*srh): %d", sizeof(*srh));
   // ip6_last_seg = (struct in6_addr *)cur_header_pointer(ctx, cur,
   //                                      offset + sizeof(*srh), sizeof(*ip6_last_seg));
   ip6_last_seg = (struct in6_addr *)cur_header_pointer(
@@ -104,30 +101,32 @@ HIKE_PROG(HIKE_PROG_NAME)
   display = bpf_be64_to_cpu(display);
   display2 = *((__u64 *)ip6_last_seg + 1);
   display2 = bpf_be64_to_cpu(display2);
-  DEBUG_HKPRG_PRINT("last segment (used as destination addr): %llx %llx",
-                    display, display2);
+  hike_pr_debug("last segment (used as destination addr): %llx %llx",
+                display, display2);
 
   /* UDP */
   offset = 0;
-  ret = ipv6_find_hdr(ctx, cur, &offset, -1, NULL, NULL);
+  ret = ipv6_find_hdr(ctx, cur, &offset, IPPROTO_UDP, NULL, NULL);
   if (unlikely(ret < 0)) {
     switch (ret) {
     case -ENOENT:
-      /* fallthrough */
+      hike_pr_debug("UDP header not found; error: %d", ret);
+      goto out;
     case -ELOOP:
-      /* fallthrough */
+      hike_pr_debug("Loop error: %d", ret);
+      goto out;
     case -EOPNOTSUPP:
-      DEBUG_HKPRG_PRINT("No Transport Info; error: %d", ret);
+      hike_pr_debug("Not supported; error: %d", ret);
       goto out;
     default:
-      DEBUG_HKPRG_PRINT("Unrecoverable error: %d", ret);
+      hike_pr_debug("Unrecoverable error: %d", ret);
       goto drop;
     }
   }
-  if (ret != IPPROTO_UDP) {
-    DEBUG_HKPRG_PRINT("Transport <> UDP : %d", ret);
-    goto out;
-  }
+  // if (ret != IPPROTO_UDP) {
+  //   hike_pr_debug("Transport <> UDP : %d", ret);
+  //   goto out;
+  // }
   udph = (struct udphdr *)cur_header_pointer(ctx, cur, offset, sizeof(*udph));
   if (unlikely(!udph)) 
     goto drop;
@@ -140,21 +139,21 @@ HIKE_PROG(HIKE_PROG_NAME)
 
   /* checksum */
   ret = ipv6_udp_checksum(ctx, &ip6h_pseudo, udph, &check);
-	if (unlikely(ret)) {
-		DEBUG_HKPRG_PRINT("Error: checksum error=%d", ret);
-    DEBUG_HKPRG_PRINT("udp check=0x%x", bpf_ntohs(check));
-		goto out;
-	}
+  if (unlikely(ret)) {
+    hike_pr_debug("Error: checksum error=%d", ret);
+    hike_pr_debug("udp check=0x%x", bpf_ntohs(check));
+    goto out;
+  }
   udph->check = check;
-  DEBUG_HKPRG_PRINT("udp check=0x%x", bpf_ntohs(check));
+  hike_pr_debug("udp check=0x%x", bpf_ntohs(check));
 
 out:
   HVM_RET = 0;
-	return HIKE_XDP_VM;
+  return HIKE_XDP_VM;
 
 drop:
-  DEBUG_HKPRG_PRINT("drop packet");
-	return HIKE_XDP_ABORTED;
+  hike_pr_debug("drop packet");
+  return HIKE_XDP_ABORTED;
 
 }
 

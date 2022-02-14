@@ -13,8 +13,6 @@
 #define REAL
 //#define REPL
 
-#define IPV6_ADDR_SIZE 128
-#define IPPROTO_SRH 43
 #define HOP_LIMIT 64
 
 #include <linux/if_ether.h>

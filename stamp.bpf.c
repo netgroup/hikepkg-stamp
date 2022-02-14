@@ -111,7 +111,8 @@ HIKE_PROG(HIKE_PROG_NAME)
    * when the fourth parameter is -1, it returns the 
    * "layer 4" final protocol
    */
-  ret = ipv6_find_hdr(ctx, cur, &offset, -1, NULL, NULL);
+// TODO only find UDP, everything else is not needed
+  ret = ipv6_find_hdr(ctx, cur, &offset, IPPROTO_UDP, NULL, NULL);
   if (unlikely(ret < 0)) {
     switch (ret) {
     case -ENOENT:
@@ -128,10 +129,10 @@ HIKE_PROG(HIKE_PROG_NAME)
     }
   }
 
-  if (ret == 58) { //Hide ICMPv6 packets
-    hvm_ret = 1;
-    goto out;
-  }
+  // if (ret == 58) { //Hide ICMPv6 packets
+  //   hvm_ret = 1;
+  //   goto out;
+  // }
 
   if (ret != IPPROTO_UDP) {
     DEBUG_HKPRG_PRINT("Transport <> UDP : %d", ret);
