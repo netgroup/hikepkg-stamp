@@ -151,7 +151,11 @@ HIKE_PROG(HIKE_PROG_NAME)
     goto out;
   }
 
+  __asm__ __volatile__ ("r2 = r2");
+
   udp_poff = offset + sizeof(*udph);
+  //barrier_data(udp_poff);
+  barrier();
 
   stamp_ptr = (struct stamp *)cur_header_pointer(ctx, cur, udp_poff, 
                                     sizeof(*stamp_ptr));
