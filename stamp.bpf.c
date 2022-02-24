@@ -51,19 +51,12 @@ bpf_map(map_time, HASH, __u8, __u64, 1);
 
 HIKE_PROG(HIKE_PROG_NAME)
 {
-  union { 
-    // struct ethhdr *eth_h;
-    struct ipv6hdr *ip6h;
-    struct udphdr *udph;
-  // #define eth_h hdr.eth_h
-#define ip6h  hdr.ip6h
-#define udph  hdr.udph
-  } hdr;
-
   struct stamp* stamp_ptr;
   __u64 receive_timestamp;
   struct hdr_cursor *cur;
   struct pkt_info *info;
+  struct ipv6hdr *ip6h;
+  struct udphdr *udph;
   __u64 hvm_ret = 0; /* set to 1 if packet won't be processed */
   __u32 nanoseconds;
   __u64 timestamp;
