@@ -35,14 +35,14 @@
 #define ERROR_ESTIMATE 0x8001
 
 struct stamp {
-  __u32 seq_number;
-  __u64 timestamp;
-  __u16 error_estimate;
-  __u16 ssid;
-  __u64 receive_timestamp;
-  __u32 sess_send_seq_num;
-  __u64 sess_send_timestamp;
-  __u16 sess_send_err_estimate;
+  __be32 seq_number;
+  __be64 timestamp;
+  __be16 error_estimate;
+  __be16 ssid;
+  __be64 receive_timestamp;
+  __be32 sess_send_seq_num;
+  __be64 sess_send_timestamp;
+  __be16 sess_send_err_estimate;
   __u16 mbz_16;
   __u8 sess_send_ttl;
 } __attribute__((packed));
