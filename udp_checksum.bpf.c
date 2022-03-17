@@ -65,7 +65,7 @@ HIKE_PROG(HIKE_PROG_NAME)
   /* get destination addr for pseudoheader from last segment of SRH */
   ret = ipv6_find_hdr(ctx, cur, &offset, NEXTHDR_ROUTING, NULL, NULL);
   if (unlikely(ret < 0)) {
-    hike_pr_debug("SRH not found; error: %d", ret);
+    hike_pr_debug("SRH not found; rc: %d", ret);
     goto drop;
   }
   /* if we are sure that there is at least 1 segment, allocating memory for
@@ -94,7 +94,7 @@ HIKE_PROG(HIKE_PROG_NAME)
   offset = 0;
   ret = ipv6_find_hdr(ctx, cur, &offset, IPPROTO_UDP, NULL, NULL);
   if (unlikely(ret < 0)) {
-    hike_pr_debug("UDP not found; error: %d", ret);
+    hike_pr_debug("UDP not found; rc: %d", ret);
     goto drop;
   }
   udph = (struct udphdr *)cur_header_pointer(ctx, cur, offset, sizeof(*udph));
@@ -119,7 +119,7 @@ HIKE_PROG(HIKE_PROG_NAME)
   /* checksum */
   ret = ipv6_udp_checksum(ctx, ip6h_pseudo, udph, &check);
   if (unlikely(ret)) {
-    hike_pr_debug("Error: checksum error=%d", ret);
+    hike_pr_err("Error: checksum error=%d", ret);
     goto drop;
   }
   udph->check = check;

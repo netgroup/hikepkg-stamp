@@ -89,7 +89,7 @@ HIKE_PROG(HIKE_PROG_NAME)
   /* UDP */
   ret = ipv6_find_hdr(ctx, cur, &offset, IPPROTO_UDP, NULL, NULL);
   if (unlikely(ret < 0)) {
-    hike_pr_debug("UDP not found; error: %d", ret);
+    hike_pr_debug("UDP not found; rc: %d", ret);
     goto drop;
   }
   udph = (struct udphdr *)cur_header_pointer(ctx, cur, offset, sizeof(*udph));

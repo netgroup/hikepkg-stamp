@@ -93,7 +93,7 @@ HIKE_PROG(HIKE_PROG_NAME)
    */
   ret = ipv6_find_hdr(ctx, cur, &offset, IPPROTO_UDP, NULL, NULL);
   if (unlikely(ret < 0)) {
-    hike_pr_debug("UDP not found; error: %d", ret);
+    hike_pr_debug("UDP not found; rc: %d", ret);
     hvm_ret = 1;
     goto out;
   }
@@ -128,7 +128,7 @@ HIKE_PROG(HIKE_PROG_NAME)
   hike_pr_debug("boot time (nanoseconds): %llx", boottime);
   delta = bpf_map_lookup_elem(&map_time, &key);
   if (unlikely(!delta)) {
-    hike_pr_debug("could not read delta from map");
+    hike_pr_err("could not read delta from map");
 		goto drop;
   }
   hike_pr_debug("delta (nanoseconds): %llx", *delta);
