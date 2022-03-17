@@ -120,8 +120,7 @@ HIKE_PROG(HIKE_PROG_NAME)
   ret = ipv6_udp_checksum(ctx, ip6h_pseudo, udph, &check);
   if (unlikely(ret)) {
     hike_pr_debug("Error: checksum error=%d", ret);
-    hike_pr_debug("udp check=0x%x", bpf_ntohs(check));
-    goto out;
+    goto drop;
   }
   udph->check = check;
   hike_pr_debug("udp check=0x%x", bpf_ntohs(check));
