@@ -10,7 +10,7 @@
  * If map is empty, the packet is dropped.
  */
 
-#define HIKE_DEBUG 1
+#define HIKE_PRINT_LEVEL HIKE_PRINT_LEVEL_DEBUG
 
 #define REAL
 //#define REPL
@@ -81,19 +81,6 @@ HIKE_PROG(HIKE_PROG_NAME)
   cur = pkt_info_cur(info);
   /* no need for checking cur != NULL here */
 
-  /* check if packet is IPv6 */
-
-  /* not needed?
-  eth_h = (struct ethhdr *)cur_header_pointer(ctx, cur, cur->mhoff, sizeof(*eth_h));
-  if (unlikely(!eth_h)) 
-    goto drop;
-  if (eth_h->h_proto != ETH_P_IPX) {
-    DEBUG_HKPRG_PRINT("Not an IPv6 packet");
-    hvm_ret = 1;
-    goto out;
-  }
-  */
-
   /* get TTL from IPv6 packet */
   ip6h = (struct ipv6hdr *)cur_header_pointer(ctx, cur, cur->nhoff, sizeof(*ip6h));
   if (unlikely(!ip6h)) 
@@ -104,31 +91,9 @@ HIKE_PROG(HIKE_PROG_NAME)
    * when the fourth parameter is -1, it returns the 
    * "layer 4" final protocol
    */
-// TODO only find UDP, everything else is not needed
   ret = ipv6_find_hdr(ctx, cur, &offset, IPPROTO_UDP, NULL, NULL);
   if (unlikely(ret < 0)) {
-    switch (ret) {
-    case -ENOENT:
-      /* fallthrough */
-    case -ELOOP:
-      /* fallthrough */
-    case -EOPNOTSUPP:
-      DEBUG_HKPRG_PRINT("No Transport Info; error: %d", ret);
-      hvm_ret = 1;
-      goto out;
-    default:
-      DEBUG_HKPRG_PRINT("Unrecoverable error: %d", ret);
-      goto drop;
-    }
-  }
-
-  // if (ret == 58) { //Hide ICMPv6 packets
-  //   hvm_ret = 1;
-  //   goto out;
-  // }
-
-  if (ret != IPPROTO_UDP) {
-    DEBUG_HKPRG_PRINT("Transport <> UDP : %d", ret);
+    hike_pr_debug("UDP not found; error: %d", ret);
     hvm_ret = 1;
     goto out;
   }
@@ -139,17 +104,12 @@ HIKE_PROG(HIKE_PROG_NAME)
 
   udp_dest = bpf_ntohs(udph->dest);
   if (udp_dest != STAMP_DST_PORT) {
-    DEBUG_HKPRG_PRINT("Destination port is not STAMP: %u", udp_dest);
+    hike_pr_debug("Destination port is not STAMP: %u", udp_dest);
     hvm_ret = 1;
     goto out;
   }
 
-  __asm__ __volatile__ ("r2 = r2");
-
   udp_poff = offset + sizeof(*udph);
-  //barrier_data(udp_poff);
-  barrier();
-
   stamp_ptr = (struct stamp *)cur_header_pointer(ctx, cur, udp_poff, 
                                     sizeof(*stamp_ptr));
   if (unlikely(!stamp_ptr))
@@ -163,21 +123,23 @@ HIKE_PROG(HIKE_PROG_NAME)
  * map with delta value, if map is empty, the packet is dropped.
  */
   timestamp = stamp_ptr->timestamp;
-  DEBUG_HKPRG_PRINT("sender timestamp: %llx", bpf_be64_to_cpu(timestamp));
+  hike_pr_debug("sender timestamp: %llx", bpf_be64_to_cpu(timestamp));
   boottime = bpf_ktime_get_boot_ns();
-  DEBUG_HKPRG_PRINT("boot time (nanoseconds): %llx", boottime);
+  hike_pr_debug("boot time (nanoseconds): %llx", boottime);
   delta = bpf_map_lookup_elem(&map_time, &key);
-  if (unlikely(!delta))
+  if (unlikely(!delta)) {
+    hike_pr_debug("could not read delta from map");
 		goto drop;
-  DEBUG_HKPRG_PRINT("delta (nanoseconds): %llx", *delta);
+  }
+  hike_pr_debug("delta (nanoseconds): %llx", *delta);
   receive_timestamp = boottime + *delta;
-  DEBUG_HKPRG_PRINT("receive timestamp (nanoseconds): %llx", receive_timestamp);
+  hike_pr_debug("receive timestamp (nanoseconds): %llx", receive_timestamp);
   seconds = receive_timestamp / 1000000000;
   nanoseconds = receive_timestamp % 1000000000;
   receive_timestamp = (__u64) seconds << 32 | nanoseconds;
-  DEBUG_HKPRG_PRINT("receive timestamp (NTP): %llx", receive_timestamp);
+  hike_pr_debug("receive timestamp (NTP): %llx", receive_timestamp);
   receive_timestamp = bpf_cpu_to_be64(receive_timestamp);
-  DEBUG_HKPRG_PRINT("new timestamp be (NTP): %llx", receive_timestamp);
+  hike_pr_debug("new timestamp be (NTP): %llx", receive_timestamp);
   stamp_ptr->timestamp = receive_timestamp;
   stamp_ptr->receive_timestamp = receive_timestamp;
   stamp_ptr->sess_send_seq_num = stamp_ptr->seq_number;
@@ -191,7 +153,7 @@ out:
 	return HIKE_XDP_VM;
 
 drop:
-  DEBUG_HKPRG_PRINT("drop packet");
+  hike_pr_debug("drop packet");
 	return HIKE_XDP_ABORTED;
 
 }

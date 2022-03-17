@@ -8,7 +8,7 @@
  * Swap src and dst port numbers in UDP header
  */
 
-#define HIKE_DEBUG 1
+#define HIKE_PRINT_LEVEL HIKE_PRINT_LEVEL_DEBUG
 
 #define REAL
 //#define REPL
@@ -73,8 +73,8 @@ HIKE_PROG(HIKE_PROG_NAME)
   memcpy(eth_h->h_dest, eth_addr, ETH_ALEN);
   memcpy(&eth_dst, eth_h->h_dest, ETH_ALEN);
   memcpy(&eth_src, eth_h->h_source, ETH_ALEN);
-  DEBUG_HKPRG_PRINT("Layer 2 dst : %llx", eth_dst);
-  DEBUG_HKPRG_PRINT("Layer 2 src : %llx", eth_src);
+  hike_pr_debug("Layer 2 dst : %llx", eth_dst);
+  hike_pr_debug("Layer 2 src : %llx", eth_src);
 
   /* IPv6 */
   ip6h = (struct ipv6hdr *)cur_header_pointer(ctx, cur, cur->nhoff,
@@ -87,26 +87,10 @@ HIKE_PROG(HIKE_PROG_NAME)
   ip6h->hop_limit = HOP_LIMIT;
 
   /* UDP */
-  ret = ipv6_find_hdr(ctx, cur, &offset, -1, NULL, NULL);
+  ret = ipv6_find_hdr(ctx, cur, &offset, IPPROTO_UDP, NULL, NULL);
   if (unlikely(ret < 0)) {
-    switch (ret) {
-    case -ENOENT:
-      /* fallthrough */
-    case -ELOOP:
-      /* fallthrough */
-    case -EOPNOTSUPP:
-      DEBUG_HKPRG_PRINT("No Transport Info; error: %d", ret);
-      hvm_ret = 1;
-      goto out;
-    default:
-      DEBUG_HKPRG_PRINT("Unrecoverable error: %d", ret);
-      goto drop;
-    }
-  }
-  if (ret != IPPROTO_UDP) {
-    DEBUG_HKPRG_PRINT("Transport <> UDP : %d", ret);
-    hvm_ret = 1;
-    goto out;
+    hike_pr_debug("UDP not found; error: %d", ret);
+    goto drop;
   }
   udph = (struct udphdr *)cur_header_pointer(ctx, cur, offset, sizeof(*udph));
   if (unlikely(!udph)) 
@@ -120,7 +104,7 @@ out:
 	return HIKE_XDP_VM;
 
 drop:
-  DEBUG_HKPRG_PRINT("drop packet");
+  hike_pr_debug("drop packet");
 	return HIKE_XDP_ABORTED;
 
 }

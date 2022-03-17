@@ -4,14 +4,13 @@
 #define HIKE_PROG_NAME    udp_checksum
 
 /* Recalculate correct UDP checksum
+ * TODO: 0 segments in SRH case
  */
 
 #define HIKE_PRINT_LEVEL HIKE_PRINT_LEVEL_DEBUG
 
 #define REAL
 //#define REPL
-
-#define IPPROTO_SRH 43
 
 #include <linux/udp.h>
 #include <linux/ipv6.h>
@@ -30,9 +29,9 @@
 
 HIKE_PROG(HIKE_PROG_NAME)
 {
-  struct ipv6hdr ip6h_pseudo;
-  // struct ipv6_sr_hdr *srh;
+  struct ipv6hdr *ip6h_pseudo;
   struct in6_addr *ip6_last_seg;
+  unsigned int shmem_off;
   struct hdr_cursor *cur;
   struct pkt_info *info;
   struct ipv6hdr *ip6h;
@@ -54,7 +53,8 @@ HIKE_PROG(HIKE_PROG_NAME)
    */
   cur = pkt_info_cur(info);
   /* no need for checking cur != NULL here */
-
+  /* scratch area on shmem starts after the pkt_info area */
+	shmem_off = sizeof(struct pkt_info);
 
   /* prepare pseudoheader IPv6 */
   ip6h = (struct ipv6hdr *)cur_header_pointer(ctx, cur, cur->nhoff,
@@ -63,24 +63,10 @@ HIKE_PROG(HIKE_PROG_NAME)
     goto drop;
 
   /* get destination addr for pseudoheader from last segment of SRH */
-  ret = ipv6_find_hdr(ctx, cur, &offset, IPPROTO_SRH, NULL, NULL);
+  ret = ipv6_find_hdr(ctx, cur, &offset, NEXTHDR_ROUTING, NULL, NULL);
   if (unlikely(ret < 0)) {
-    switch (ret) {
-    case -ENOENT:
-      /* fallthrough */
-    case -ELOOP:
-      /* fallthrough */
-    case -EOPNOTSUPP:
-      hike_pr_debug("-EOPNOTSUPP; error: %d", ret);
-      goto out;
-    default:
-      hike_pr_debug("Unrecoverable error: %d", ret);
-      goto drop;
-    }
-  }
-  if (ret != IPPROTO_SRH) {
-    hike_pr_debug("No SRH : %d", ret);
-    goto out;
+    hike_pr_debug("SRH not found; error: %d", ret);
+    goto drop;
   }
   /* if we are sure that there is at least 1 segment, allocating memory for
    * the srh is not necessary
@@ -108,37 +94,30 @@ HIKE_PROG(HIKE_PROG_NAME)
   offset = 0;
   ret = ipv6_find_hdr(ctx, cur, &offset, IPPROTO_UDP, NULL, NULL);
   if (unlikely(ret < 0)) {
-    switch (ret) {
-    case -ENOENT:
-      hike_pr_debug("UDP header not found; error: %d", ret);
-      goto out;
-    case -ELOOP:
-      hike_pr_debug("Loop error: %d", ret);
-      goto out;
-    case -EOPNOTSUPP:
-      hike_pr_debug("Not supported; error: %d", ret);
-      goto out;
-    default:
-      hike_pr_debug("Unrecoverable error: %d", ret);
-      goto drop;
-    }
+    hike_pr_debug("UDP not found; error: %d", ret);
+    goto drop;
   }
-  // if (ret != IPPROTO_UDP) {
-  //   hike_pr_debug("Transport <> UDP : %d", ret);
-  //   goto out;
-  // }
   udph = (struct udphdr *)cur_header_pointer(ctx, cur, offset, sizeof(*udph));
   if (unlikely(!udph)) 
     goto drop;
 
+  /* allocate pseudoheader in shmem */
+  ip6h_pseudo = hike_pcpu_shmem_obj(shmem_off, struct ipv6hdr);
+	if (unlikely(!ip6h_pseudo)) {
+		hike_pr_crit("error during access to shmem");
+		goto drop;
+	}
+	/* this emulates a kind of allocation in the per-CPU shmem */
+	shmem_off += sizeof(*ip6h_pseudo);
+
   /* populate data into pseudoheader */
-  ip6h_pseudo.daddr = *ip6_last_seg;
-  ip6h_pseudo.saddr = ip6h->saddr;
-  ip6h_pseudo.payload_len = udph->len;
-  ip6h_pseudo.nexthdr = IPPROTO_UDP;
+  ip6h_pseudo->daddr = *ip6_last_seg;
+  ip6h_pseudo->saddr = ip6h->saddr;
+  ip6h_pseudo->payload_len = udph->len;
+  ip6h_pseudo->nexthdr = IPPROTO_UDP;
 
   /* checksum */
-  ret = ipv6_udp_checksum(ctx, &ip6h_pseudo, udph, &check);
+  ret = ipv6_udp_checksum(ctx, ip6h_pseudo, udph, &check);
   if (unlikely(ret)) {
     hike_pr_debug("Error: checksum error=%d", ret);
     hike_pr_debug("udp check=0x%x", bpf_ntohs(check));
