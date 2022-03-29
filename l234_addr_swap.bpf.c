@@ -37,15 +37,13 @@ HIKE_PROG(HIKE_PROG_NAME)
         unsigned char eth_addr[ETH_ALEN];
         struct in6_addr *seg_high;
         struct in6_addr *seg_low;
-        // struct in6_addr ip6addr;
+        struct in6_addr ip6addr;
         struct ipv6_sr_hdr *srh;
         struct hdr_cursor *cur;
         struct pkt_info *info;
         struct ethhdr *eth_h;
         struct ipv6hdr *ip6h;
-        struct in6_addr temp;
         struct udphdr *udph;
-        __u8 first_segment;
         __u16 udp_port;
         int offset = 0;
         __u64 eth_src;
@@ -86,9 +84,9 @@ HIKE_PROG(HIKE_PROG_NAME)
                                                     sizeof(*ip6h));
         if (unlikely(!ip6h))
                 goto drop;
-        // ip6addr = ip6h->saddr;
+        ip6addr = ip6h->saddr;
         ip6h->saddr = ip6h->daddr;
-        // ip6h->daddr = ip6addr;
+        ip6h->daddr = ip6addr;
         ip6h->hop_limit = HOP_LIMIT;
 
         /* SRH */
@@ -102,47 +100,22 @@ HIKE_PROG(HIKE_PROG_NAME)
                                                        sizeof(*srh));
         if (unlikely(!srh))
                 goto drop;
-        first_segment = srh->first_segment;
-        srh->segments_left = first_segment;
-        if (first_segment != 0)
-        { /* curly brackets needed to limit scope of array (goto error) */
-                // struct in6_addr (*segments)[first_segment +1];
-                offset += sizeof(struct ipv6_sr_hdr);
-                // segments = (struct in6_addr(*)[first_segment +1])cur_header_pointer(
-                //             ctx, cur, offset, sizeof(*segments));
-                // if (unlikely(!segments))
-                //         goto drop;
-                /* reverse segment list */
-                for (__u8 low = 0, high = srh->first_segment; low < high; low++, high--) {
-                        seg_low = (struct in6_addr *)cur_header_pointer(
-                                ctx, cur, offset, sizeof(*seg_low));
-                        if (unlikely(!seg_low)) 
-                                goto drop;
-                        seg_high = (struct in6_addr *)cur_header_pointer(
-                                ctx, cur, offset + high * sizeof(*seg_high), sizeof(*seg_high));
-                        if (unlikely(!seg_high)) 
-                                goto drop;
-                        temp = *seg_low;
-                        *seg_low = *seg_high;
-                        *seg_high = temp;
-                }
-
-
-
-                // for (__u8 low = 0, high = srh->first_segment; low < high; low++, high--)
-                // {
-                //         struct in6_addr temp = (*segments)[low];
-                //         (*segments)[low] = (*segments)[high];
-                //         (*segments)[high] = temp;
-                // }
-                // hike_pr_debug("seg1: %x%x", (*segments)[srh->first_segment].s6_addr[14],
-                //                 (*segments)[srh->first_segment].s6_addr[15]);
-                // hike_pr_debug("seg list size: %u", sizeof((*segments)));
-                /* IPv6 daddr is new first segment */
-                // ip6addr = (*segments)[srh->first_segment];
-                // ip6h->daddr = (*segments)[first_segment];
-                // hike_pr_debug("seg0: %llx", *((__u64 *) &ip6addr));
-                // memcpy(&ip6h->daddr, &(*segments)[0], 16);
+        /* reset segments left */
+        srh->segments_left = srh->first_segment;
+        offset += sizeof(struct ipv6_sr_hdr);
+        /* reverse segment list */
+        for (__u8 low = 0, high = srh->first_segment; low < high; low++, high--) {
+                seg_low = (struct in6_addr *)cur_header_pointer(
+                        ctx, cur, offset + low * sizeof(*seg_low), sizeof(*seg_low));
+                if (unlikely(!seg_low)) 
+                        goto drop;
+                seg_high = (struct in6_addr *)cur_header_pointer(
+                        ctx, cur, offset + high * sizeof(*seg_high), sizeof(*seg_high));
+                if (unlikely(!seg_high)) 
+                        goto drop;
+                ip6addr = *seg_low;
+                *seg_low = *seg_high;
+                *seg_high = ip6addr;
         }
 
         /* UDP */
