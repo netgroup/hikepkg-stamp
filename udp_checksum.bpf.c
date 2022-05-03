@@ -125,7 +125,6 @@ HIKE_PROG(HIKE_PROG_NAME)
   udph->check = check;
   hike_pr_debug("udp check=0x%x", bpf_ntohs(check));
 
-out:
   HVM_RET = 0;
   return HIKE_XDP_VM;
 
