@@ -56,7 +56,7 @@ HIKE_PROG(HIKE_PROG_NAME)
                 goto drop;
 
         udp_dest = bpf_ntohs(udph->dest);
-        if (udp_dest != STAMP_DST_PORT) {
+        if (udp_dest != STAMP_SND_PORT) {
                 hike_pr_debug("Destination port is not STAMP: %u", udp_dest);
                 goto out;
         }
@@ -92,18 +92,29 @@ HIKE_PROG(HIKE_PROG_NAME)
         col_value.refl_send = bpf_be64_to_cpu(stamp_ptr->timestamp);
         col_value.collector = receive_timestamp;
         /* write into map */
-        ret = bpf_map_update_elem(&map_collector, &col_key, &col_value,
-                                  BPF_NOEXIST);
+        // ret = bpf_map_update_elem(&map_collector, &col_key, &col_value,
+        //                           BPF_NOEXIST);
 
-        col_value_print = bpf_map_lookup_elem(&map_collector, &col_key);
-        if (unlikely(!col_value_print)) {
-                hike_pr_err("could not read collector data from map");
-                goto drop;
-        }
-        hike_pr_debug("timestamps:\n%llx", col_value_print->sender);
-        hike_pr_debug("%llx", col_value_print->refl_receive);
-        hike_pr_debug("%llx", col_value_print->refl_send);
-        hike_pr_debug("%llx", col_value_print->collector);
+        /* TEST
+         * delta represents a counter, instead of writing the timestamps
+         * in their map, the counter is incremented and rewritten on map
+         */
+        *delta = *delta + 1;
+        ret = bpf_map_update_elem(&map_time, &key, delta, BPF_EXIST);
+
+
+
+
+// DEBUG...
+        // col_value_print = bpf_map_lookup_elem(&map_collector, &col_key);
+        // if (unlikely(!col_value_print)) {
+        //         hike_pr_err("could not read collector data from map");
+        //         goto drop;
+        // }
+        // hike_pr_debug("timestamps:\n%llx", col_value_print->sender);
+        // hike_pr_debug("%llx", col_value_print->refl_receive);
+        // hike_pr_debug("%llx", col_value_print->refl_send);
+        // hike_pr_debug("%llx", col_value_print->collector);
 
 drop:
         hike_pr_debug("drop packet");

@@ -57,6 +57,7 @@ struct ip_src_dst {
 
 // #define STAMP_DST_PORT 42069
 #define STAMP_DST_PORT                  862
+#define STAMP_SND_PORT                  42069
 #define ERROR_ESTIMATE                  0x8001
 #define MAX_ENTRIES_CACHE_MAP           1024
 #define MAX_ENTRIES_COLLECTOR_MAP       64
