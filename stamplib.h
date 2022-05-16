@@ -23,6 +23,8 @@ struct eth_ipv6_srh {
         struct ethhdr eth_h;
         struct ipv6hdr ip6h;
         struct ipv6_sr_hdr srh;
+        // struct udphdr udph;
+        // struct stamp stamp;
 } __attribute__((packed));
 
 struct udp_stamp {
@@ -42,12 +44,25 @@ struct collector_value {
         __u64 collector;
 } __attribute__((packed));
 
+struct eth_src_dst {
+        unsigned char h_dest[ETH_ALEN];
+	unsigned char h_source[ETH_ALEN];
+} __attribute__((packed));
+
+struct ip_src_dst {
+        struct in6_addr saddr;
+	struct in6_addr daddr;
+} __attribute__((packed));
 
 
+// #define STAMP_DST_PORT 42069
+#define STAMP_DST_PORT                  862
+#define ERROR_ESTIMATE                  0x8001
+#define MAX_ENTRIES_CACHE_MAP           1024
+#define MAX_ENTRIES_COLLECTOR_MAP       64
+#define HOP_LIMIT                       64
 
-#define STAMP_DST_PORT 42069
-// #define STAMP_DST_PORT 862
-#define ERROR_ESTIMATE 0x8001
-#define MAX_ENTRIES_CACHE_MAP 1024
-#define MAX_ENTRIES_COLLECTOR_MAP 64
-
+#define ETH_SRC         1
+#define ETH_DST         2
+#define IP6_SRC         1
+#define IP6_DST         2
