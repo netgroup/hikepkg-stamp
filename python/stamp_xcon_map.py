@@ -18,8 +18,8 @@ OUT_INTF_INDEX = 5
 IN_INTF_INDEX = 4
 
 BASE_PATH =  '/sys/fs/bpf/maps'
-PACKAGE = 'hike_default'
-PROGRAM = 'l2xcon'
+PACKAGE = 'stamp'
+PROGRAM = 'stamp_mono'
 MAP = 'l2xcon_map'
 map_path = f"{BASE_PATH}/{PACKAGE}/{PROGRAM}/{MAP}"
 map_as_array = []

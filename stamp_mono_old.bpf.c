@@ -6,26 +6,43 @@
 /* addresses swap, stamp timestamps and udp checksum all at once
  */
 
-//#define HIKE_PRINT_LEVEL HIKE_PRINT_LEVEL_DEBUG
-#define HIKE_PRINT_LEVEL 0
+#define HIKE_PRINT_LEVEL HIKE_PRINT_LEVEL_DEBUG
 
 #include "hike_vm.h"
 #include "parse_helpers.h"
 #include "stamplib.h"
 
-#define HIKE_EBPF_PROG_L2XCON_IFMAX	8
-
 bpf_map(map_time, HASH, __u8, __u64, 1);
+
+
+
+/* bpf_map(map_eth, HASH, __u8, unsigned char[ETH_ALEN], 2);
+ * cannot use define from map.h because type is an array
+ */
+// struct bpf_map_def SEC("maps") map_eth = {
+//         .type        = EVAL_CAT_2(BPF_MAP_TYPE_, HASH),
+//         .key_size    = sizeof(__u8),
+//         .value_size  = sizeof(unsigned char[ETH_ALEN]),
+//         .max_entries = 2,
+// };
+// struct HIKE_VM_BTF_MAP_NAME(map_eth) {
+//         __u8 key0;
+//         unsigned char value[ETH_ALEN];
+// };
+// struct HIKE_VM_BTF_MAP_NAME(map_eth) btf_bpf_map_section(map_eth)
+// 	HIKE_VM_BTF_MAP_NAME(map_eth) = { 0, };
+
+
+
+// bpf_map(map_ipv6, HASH, __u8, struct in6_addr, 2);
 
 bpf_map(map_eth, HASH, __u8, struct eth_src_dst, 1);
 bpf_map(map_ipv6, HASH, __u8, struct ip_src_dst, 1);
-bpf_map(map_seglist, HASH, __u8, struct in6_addr, 256);
 
-bpf_map(l2xcon_map, ARRAY, __u32, __u32, HIKE_EBPF_PROG_L2XCON_IFMAX);
+bpf_map(map_seglist, HASH, __u8, struct in6_addr, 256);
 
 HIKE_PROG(HIKE_PROG_NAME)
 {
-        const __u32 iif = ctx->ingress_ifindex;
         unsigned char (*eth_addr)[ETH_ALEN];
         struct eth_src_dst *eth_src_dst_ptr;
         struct ip_src_dst *ip_src_dst_ptr;
@@ -40,7 +57,6 @@ HIKE_PROG(HIKE_PROG_NAME)
         struct ethhdr *eth_h;
         struct in6_addr *seg;
         struct udphdr *udph;
-        __be16 *udp_dest;
         __u16 udp_port;
         int offset = 0;
         __u64 boottime;
@@ -48,46 +64,20 @@ HIKE_PROG(HIKE_PROG_NAME)
         __u8 key0 = 0;
         __u8 key1 = 1;
         __u64 *delta;
-        __u32 *oif;
         long ret;
         int i, j;
 
-        /* FILTER */
+        boottime = bpf_ktime_get_boot_ns();
+
         /* retrieve packet information from HIKe shared memory*/
         info = hike_pcpu_shmem();
         if (unlikely(!info))
                 goto drop;
-
         /* take the reference to the cursor object which has been saved into
-         * the HIKe shared memory
-         */
+        * the HIKe shared memory
+        */
         cur = pkt_info_cur(info);
         /* no need for checking cur != NULL here */
-
-        /* we search for the UDP protocol just after the L3 one which should
-	 * be, in this case, the IPv6 protocol.
-	 */
-	offset = cur->nhoff;
-        ret = ipv6_find_hdr(ctx, cur, &offset, IPPROTO_UDP, NULL, NULL);
-        if (unlikely(ret < 0)) {
-                hike_pr_debug("UDP not found; rc: %d", ret);
-                goto out;
-        }
-
-        /* set offset to UDP destination port */
-        offset += 2;
-
-        udp_dest = (__be16 *)cur_header_pointer(ctx, cur, offset, 2);
-        if (unlikely(!udp_dest)) 
-                goto drop;
-
-        if (bpf_ntohs(*udp_dest) != STAMP_DST_PORT) {
-                hike_pr_debug("Destination port is not STAMP: %u", bpf_ntohs(*udp_dest));
-                goto out;
-        }
-
-        boottime = bpf_ktime_get_boot_ns();
-
         /* scratch area on shmem starts after the pkt_info area */
         /* allocate pseudoheader in shmem */
         ip6h_pseudo = hike_pcpu_shmem_obj(sizeof(struct pkt_info), struct ipv6hdr);
@@ -101,6 +91,16 @@ HIKE_PROG(HIKE_PROG_NAME)
                                                     sizeof(*eth_h));
         if (unlikely(!eth_h))
                 goto drop;
+        /* do eth from maps */
+        // eth_addr = (unsigned char (*)[ETH_ALEN]) bpf_map_lookup_elem(&map_eth, &key0);
+        // if (unlikely(!eth_addr))
+        //         goto drop;
+        // memcpy(eth_h->h_source, eth_addr, ETH_ALEN);
+
+        // eth_addr = (unsigned char (*)[ETH_ALEN]) bpf_map_lookup_elem(&map_eth, &key1);
+        // if (unlikely(!eth_addr))
+        //         goto drop;
+        // memcpy(eth_h->h_dest, eth_addr, ETH_ALEN);
 
 // use a single key for the whole struct
         eth_src_dst_ptr = (struct eth_src_dst *) bpf_map_lookup_elem(&map_eth, &key0);
@@ -115,7 +115,17 @@ HIKE_PROG(HIKE_PROG_NAME)
         if (unlikely(!ip6h))
                 goto drop;
 
+        /* do IPv6 from maps */
         ip6h->hop_limit = HOP_LIMIT;
+        // ip6addr = (struct in6_addr *) bpf_map_lookup_elem(&map_ipv6, &key0);
+        // if (unlikely(!ip6addr))
+        //         goto drop;
+        // ip6h->saddr = *ip6addr;
+
+        // ip6addr = (struct in6_addr *) bpf_map_lookup_elem(&map_ipv6, &key1);
+        // if (unlikely(!ip6addr))
+        //         goto drop;
+        // ip6h->daddr = *ip6addr;
 
 // use a single key for the whole struct
         ip_src_dst_ptr = (struct ip_src_dst *) bpf_map_lookup_elem(&map_ipv6, &key0);
@@ -126,7 +136,6 @@ HIKE_PROG(HIKE_PROG_NAME)
         /* pseudoheader */
         ip6h_pseudo->saddr = ip6h->saddr;
 
-        offset = 0;
         /* SRH */
         ret = ipv6_find_hdr(ctx, cur, &offset, NEXTHDR_ROUTING, NULL, NULL);
         if (unlikely(ret < 0))
@@ -217,24 +226,10 @@ HIKE_PROG(HIKE_PROG_NAME)
         }
         udph->check = check;
         hike_pr_debug("udp check=0x%x", bpf_ntohs(check));
-
-        /* layer 2 cross connect */
-        hike_pr_debug("HIKe Prog: l2xcon REG_1=0x%llx, iif=%d", _I_REG(1), iif);
-
-	oif = bpf_map_lookup_elem(&l2xcon_map, &iif);
-	if (!oif) {
-		hike_pr_debug("HIKe Prog: l2xcon invalid oif");
-		return XDP_ABORTED;
-	}
-
-	hike_pr_debug("HIKe Prog: l2xcon cros-connectiong iif=%d, oif=%d",
-		    iif, *oif);
-
-	return bpf_redirect(*oif, 0);
         
-out:
-        hike_pr_debug("pass packet");
-        return XDP_PASS;
+        hike_pr_debug("hello");
+        HVM_RET = 0;
+        return HIKE_XDP_VM;
 drop:
         hike_pr_debug("drop packet");
         return HIKE_XDP_ABORTED;
