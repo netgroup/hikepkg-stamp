@@ -7,7 +7,8 @@
  * check if SSID corresponds to cached packet
  */
 
-#define HIKE_PRINT_LEVEL HIKE_PRINT_LEVEL_DEBUG
+// #define HIKE_PRINT_LEVEL HIKE_PRINT_LEVEL_DEBUG
+#define HIKE_PRINT_LEVEL 0
 
 #include "hike_vm.h"
 #include "parse_helpers.h"
@@ -120,8 +121,8 @@ drop:
         hike_pr_debug("drop packet");
         return HIKE_XDP_ABORTED;
 out:
-        HVM_RET = 0;
-        return HIKE_XDP_VM;
+        hike_pr_debug("pass packet");
+        return XDP_PASS;
 }
 
 EXPORT_HIKE_PROG_1(HIKE_PROG_NAME);
