@@ -64,6 +64,28 @@ HIKE_PROG(HIKE_PROG_NAME)
         cur = pkt_info_cur(info);
         /* no need for checking cur != NULL here */
 
+        /* we search for the UDP protocol just after the L3 one which should
+	 * be, in this case, the IPv6 protocol.
+	 */
+	offset = cur->nhoff;
+        ret = ipv6_find_hdr(ctx, cur, &offset, IPPROTO_UDP, NULL, NULL);
+        if (unlikely(ret < 0)) {
+                hike_pr_debug("UDP not found; rc: %d", ret);
+                goto out;
+        }
+
+        /* set offset to UDP destination port */
+        offset += 2;
+
+        udp_dest = (__be16 *)cur_header_pointer(ctx, cur, offset, 2);
+        if (unlikely(!udp_dest)) 
+                goto drop;
+
+        if (bpf_ntohs(*udp_dest) != STAMP_DST_PORT) {
+                hike_pr_debug("Destination port is not STAMP: %u", bpf_ntohs(*udp_dest));
+                goto out;
+        }
+
         boottime = bpf_ktime_get_boot_ns();
 
         /* scratch area on shmem starts after the pkt_info area */
@@ -104,6 +126,7 @@ HIKE_PROG(HIKE_PROG_NAME)
         /* pseudoheader */
         ip6h_pseudo->saddr = ip6h->saddr;
 
+        offset = 0;
         /* SRH */
         ret = ipv6_find_hdr(ctx, cur, &offset, NEXTHDR_ROUTING, NULL, NULL);
         if (unlikely(ret < 0))

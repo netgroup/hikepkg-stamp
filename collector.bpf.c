@@ -27,7 +27,6 @@ HIKE_PROG(HIKE_PROG_NAME)
         __u64 receive_timestamp;
         struct hdr_cursor *cur;
         struct pkt_info *info;
-        struct udphdr *udph;
         __u16 udp_dest;
         int offset = 0;
         __u64 boottime;
@@ -51,18 +50,7 @@ HIKE_PROG(HIKE_PROG_NAME)
                 goto out;
         }
 
-        udph = (struct udphdr *)cur_header_pointer(ctx, cur, offset,
-                                                   sizeof(*udph));
-        if (unlikely(!udph)) 
-                goto drop;
-
-        udp_dest = bpf_ntohs(udph->dest);
-        if (udp_dest != STAMP_SND_PORT) {
-                hike_pr_debug("Destination port is not STAMP: %u", udp_dest);
-                goto out;
-        }
-
-        offset += sizeof(*udph);
+        offset += sizeof(struct udphdr);
         stamp_ptr = (struct stamp *)cur_header_pointer(ctx, cur, offset, 
                                                        sizeof(*stamp_ptr));
         if (unlikely(!stamp_ptr))
