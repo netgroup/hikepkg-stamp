@@ -15,7 +15,7 @@ import cal
 import hex_types as ht
 
 OUT_INTF_INDEX = 5
-IN_INTF_INDEX = 4
+IN_INTF_INDEX = 3
 
 BASE_PATH =  '/sys/fs/bpf/maps'
 PACKAGE = 'stamp'

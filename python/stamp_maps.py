@@ -122,6 +122,7 @@ if not os.path.exists(map_path):
 elif args.counter:
       print("counter mode")
       cal.cal_map_update(map_path, ht.u8(0), 0)
+      #cal.cal_map_update(map_path, ht.u48(0), [0, 0, 0, 0])
       map_as_array = json.loads(cal.bpftool_map_dump(map_path))
       print(f"updated map:\n{map_as_array}")
 elif not os.path.exists(TIME_EXEC):

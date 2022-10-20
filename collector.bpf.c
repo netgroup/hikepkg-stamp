@@ -7,7 +7,7 @@
  * check if SSID corresponds to cached packet
  */
 
-// #define HIKE_PRINT_LEVEL HIKE_PRINT_LEVEL_DEBUG
+//#define HIKE_PRINT_LEVEL HIKE_PRINT_LEVEL_DEBUG
 #define HIKE_PRINT_LEVEL 0
 
 #include "hike_vm.h"
@@ -30,14 +30,17 @@ HIKE_PROG(HIKE_PROG_NAME)
         __u16 udp_dest;
         int offset = 0;
         __u64 boottime;
+        //__u64 delta = 1;
         __u64 *delta;
         __u8 key = 0;
         long ret;
 
         /* retrieve packet information from HIKe shared memory*/
         info = hike_pcpu_shmem();
-        if (unlikely(!info))
+        if (unlikely(!info)) {
+		hike_pr_debug("cannot retrieve pkt info");
                 goto drop;
+	}
         /* take the reference to the cursor object which has been saved into
         * the HIKe shared memory
         */
@@ -47,14 +50,16 @@ HIKE_PROG(HIKE_PROG_NAME)
         ret = ipv6_find_hdr(ctx, cur, &offset, IPPROTO_UDP, NULL, NULL);
         if (unlikely(ret < 0)) {
                 hike_pr_debug("UDP not found; rc: %d", ret);
-                goto out;
+                goto drop;
         }
 
         offset += sizeof(struct udphdr);
         stamp_ptr = (struct stamp *)cur_header_pointer(ctx, cur, offset, 
                                                        sizeof(*stamp_ptr));
-        if (unlikely(!stamp_ptr))
+        if (unlikely(!stamp_ptr)) {
+		hike_pr_debug("cannot retrieve stamp ptr");
                 goto drop;
+	}
 
         /* read boot time from kernel, read delta between kernel boot time
          * and user space clock real time from map. Add them up and get
@@ -65,10 +70,11 @@ HIKE_PROG(HIKE_PROG_NAME)
          */
         boottime = bpf_ktime_get_boot_ns();
         delta = bpf_map_lookup_elem(&map_time, &key);
-        if (unlikely(!delta)) {
+	if (unlikely(!delta)) {
                 hike_pr_err("could not read delta from map");
                 goto drop;
         }
+        //receive_timestamp = boottime + delta;
         receive_timestamp = boottime + *delta;
         /* convert to NTP format */
         receive_timestamp = (__u64) (receive_timestamp / 1000000000) << 32 |
@@ -91,7 +97,22 @@ HIKE_PROG(HIKE_PROG_NAME)
         *delta = *delta + 1;
         ret = bpf_map_update_elem(&map_time, &key, delta, BPF_EXIST);
 
-
+        /* TEST 2
+         * col_value.sender represents a counter
+         * the counter is incremented and rewritten on map
+         
+	memset(&col_key, 0, sizeof(struct collector_key));
+	hike_pr_debug("key.ssid: %d\tkey.seq_number: %d", col_key.ssid, col_key.seq_number);
+        col_value_print = bpf_map_lookup_elem(&map_collector, &col_key);
+        if (unlikely(!col_value_print)) {
+                hike_pr_err("could not read collector data from map");
+                goto drop;
+        }
+	col_value.sender = col_value_print->sender + 1;
+	hike_pr_debug("sender: %d", col_value.sender);
+        ret = bpf_map_update_elem(&map_collector, &col_key, &col_value,
+                                  BPF_ANY); */
+	hike_pr_debug("map update ret: %d", ret);
 
 
 // DEBUG...
