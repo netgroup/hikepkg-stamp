@@ -30,8 +30,8 @@ HIKE_PROG(HIKE_PROG_NAME)
         __u16 udp_dest;
         int offset = 0;
         __u64 boottime;
-        //__u64 delta = 1;
-        __u64 *delta;
+        //__u64 delta = 1;        /* use for TEST 2 */
+        __u64 *delta;         /* use for TEST 1 */
         __u8 key = 0;
         long ret;
 
@@ -69,13 +69,14 @@ HIKE_PROG(HIKE_PROG_NAME)
          * map with delta value, if map is empty, the packet is dropped.
          */
         boottime = bpf_ktime_get_boot_ns();
+                                                    /* use for TEST 1 */
         delta = bpf_map_lookup_elem(&map_time, &key);
 	if (unlikely(!delta)) {
                 hike_pr_err("could not read delta from map");
                 goto drop;
-        }
-        //receive_timestamp = boottime + delta;
-        receive_timestamp = boottime + *delta;
+        }                                              /* until here */
+        //receive_timestamp = boottime + delta;       /* use for TEST 2 */
+        receive_timestamp = boottime + *delta;    /* use for TEST 1 */
         /* convert to NTP format */
         receive_timestamp = (__u64) (receive_timestamp / 1000000000) << 32 |
                             (receive_timestamp % 1000000000);
@@ -87,10 +88,11 @@ HIKE_PROG(HIKE_PROG_NAME)
         col_value.refl_send = bpf_be64_to_cpu(stamp_ptr->timestamp);
         col_value.collector = receive_timestamp;
         /* write into map */
+        /* use for real implementation */
         // ret = bpf_map_update_elem(&map_collector, &col_key, &col_value,
         //                           BPF_NOEXIST);
 
-        /* TEST
+        /* TEST 1
          * delta represents a counter, instead of writing the timestamps
          * in their map, the counter is incremented and rewritten on map
          */
@@ -100,18 +102,20 @@ HIKE_PROG(HIKE_PROG_NAME)
         /* TEST 2
          * col_value.sender represents a counter
          * the counter is incremented and rewritten on map
-         
-	memset(&col_key, 0, sizeof(struct collector_key));
-	hike_pr_debug("key.ssid: %d\tkey.seq_number: %d", col_key.ssid, col_key.seq_number);
-        col_value_print = bpf_map_lookup_elem(&map_collector, &col_key);
-        if (unlikely(!col_value_print)) {
-                hike_pr_err("could not read collector data from map");
-                goto drop;
-        }
-	col_value.sender = col_value_print->sender + 1;
-	hike_pr_debug("sender: %d", col_value.sender);
-        ret = bpf_map_update_elem(&map_collector, &col_key, &col_value,
-                                  BPF_ANY); */
+         */
+	// memset(&col_key, 0, sizeof(struct collector_key));
+	// hike_pr_debug("key.ssid: %d\tkey.seq_number: %d", col_key.ssid, col_key.seq_number);
+        // col_value_print = bpf_map_lookup_elem(&map_collector, &col_key);
+        // if (unlikely(!col_value_print)) {
+        //         hike_pr_err("could not read collector data from map");
+        //         goto drop;
+        // }
+	// col_value.sender = col_value_print->sender + 1;
+	// hike_pr_debug("sender: %d", col_value.sender);
+        // ret = bpf_map_update_elem(&map_collector, &col_key, &col_value,
+        //                           BPF_ANY);
+
+
 	hike_pr_debug("map update ret: %d", ret);
 
 
